@@ -86,7 +86,15 @@ pro savebestmodel_final, configfilepathandname
   readcol, outfilepath + inputfilename, FORMAT = fmt, bestmodelname, bestT, bestlogg, bestf, bestk, bestchi, bestdof, bestredchi, bestvsini, bestrvshift, /SILENT, COMMENT='#' ; Read in the data
   ;# Filename                                  T_eff             log(g)         f_sed          kzz        chisquare       d.o.f.             reduchisquare    vsini(km/s)     rv(km/s)       a        b       c
   bestindex = where(bestchi eq min(bestchi))
-
+  ; temporary measure (20230518 by Tako)
+  print, bestindex
+  print, size(bestindex)
+  print, n_elements(bestindex)
+  IF n_elements(bestindex) gt 1 THEN BEGIN
+    print, 'Multiple bestindexes are reduced to one as a temporary measure.'
+    bestindex = bestindex[0]
+  endif
+  
   print, 'best model: ' + bestmodelname[bestindex] + ', vsini=' + strtrim(bestvsini[bestindex],1) + ', rv=' + strtrim(bestrvshift[bestindex],1) + ', redchisquare=' + strtrim(bestredchi[bestindex],1)
 
   ; check if the output directory exists. If not, make it.
@@ -217,6 +225,11 @@ pro savebestmodel_final, configfilepathandname
 
   ;;;;;;;;;
   ; GET THIS MODEL'S PARAMETERS from it's filename
+  print, '    '
+  print, 'tmp tako #test230518'
+  print, bestindex
+  print, modelnames
+  print, '    '
   modelparams = getmodelparameters_final(modeltype, modelnames) ; modelparams = [temperature, g, fsed]
 
   ;;;;;;;;;
@@ -298,23 +311,47 @@ pro savebestmodel_final, configfilepathandname
   
   p1 = plot(datalam_match, dataflux_final, color='red', xrange=[lowerlam-0.002,upperlam+0.002], yrange=[0,max(dataflux_final)+0.1], $
     xtitle='Wavelength (um)', ytitle = 'Normalized Flux', layout=[1,3,1], DIM=[1000,700], name='Data', $
-    title=objectname + ', ' + wavelengthregionname + ', ' + modeltype + ' ' + modelnames + ', vsini=' + trim(vsinis[0]) + ' km/s, rv=' + trim(shifts[0]) + ' km/s, $\chi^2_R$ = ' + STRING(reducedchisquarevalue, FORMAT='(F8.3)'))
-    p2 = plot(datalam_match, modelflux_final, /OVERPLOT, color='blue', name='Model')
-  p3 = plot(datalam_match, error_final, /OVERPLOT, color='gray', name='Error')
+    title=objectname + ', ' + wavelengthregionname + ', ' + modeltype + ' ' + modelnames + ', vsini=' + trim(vsinis[0]) + ' km/s, rv=' + trim(shifts[0]) + ' km/s, $\chi^2_R$ = ' + STRING(reducedchisquarevalue, FORMAT='(F8.3)'), $
+    /buffer)
+  p2 = plot(datalam_match, modelflux_final, /OVERPLOT, color='blue', name='Model', $
+    /buffer)
+  p3 = plot(datalam_match, error_final, /OVERPLOT, color='gray', name='Error', $
+    /buffer)
   leg = LEGEND(TARGET=[p1,p2,p3], POSITION=[0.85,0.71], /NORMAL, /AUTO_TEXT_COLOR, VERTICAL_SPACING=0.015)
   p4 = plot(datalam_match, ( dataflux_final-modelflux_final ), xtitle='Wavelength (um)', ytitle='Residuals', xrange=[lowerlam-0.002,upperlam+0.002], $
-    yrange=[-1.0 * ((max(dataflux_final)+0.1)/2.0),((max(dataflux_final)+0.1)/2.0) ], /current, layout=[1,3,2])
-  line = plot([0,10],[0,0], color='grey', /overplot)
+    yrange=[-1.0 * ((max(dataflux_final)+0.1)/2.0),((max(dataflux_final)+0.1)/2.0) ], /current, layout=[1,3,2], $
+    /buffer)
+  line = plot([0,10],[0,0], color='grey', /overplot, $
+    /buffer)
   p5 = plot(datalam_match, chisquarespec, xtitle='Wavelength (um)', ytitle='Chi square contribution', xrange=[lowerlam-0.002,upperlam+0.002],$
-    /current, layout=[1,3,3])
-  p5.save, outfilepath + 'figures/' + outfilename+'_bestfit_figure.png'
-  p5.save, outfilepath + 'figures/' + outfilename+'_bestfit_figure.pdf'
-  p5.save, outfilepath + 'figures/' + outfilename+'_bestfit_figure.eps'
+    /current, layout=[1,3,3], $
+    /buffer)
+  outputfigurefilename = outfilepath + 'figures/' + outfilename + '_bestfit_figure'
+  p5.save, outputfigurefilename + '.png'
+  p5.save, outputfigurefilename + '.pdf'
+  ;p5.save, outputfigurefilename + '.eps'
   p5.close
+
+  ; tmp notes by Tako... (Removed in the fugure)
+  ; The NAME field of the !D system variable contains the name of the
+  ; current plotting device.
+  ;;;     mydevice = !D.NAME
+  ; Set plotting to PostScript:
+  ;;;     SET_PLOT, 'Z'
+  ; Use DEVICE to set some PostScript device options:
+  ;DEVICE, FILENAME=outputfigurefilename+'.png', /LANDSCAPE
+  ;;;     DEVICE, set_resolution=[640,680]
+  ; Make a simple plot to the PostScript file:
+  ;;;     PLOT, FINDGEN(10)
+  ;;;     write_png, 'test_filename.png', tvrd()
+  ; Close the PostScript file:
+  ;;;     DEVICE, /CLOSE
+  ; Return plotting to the original device:
+  ;;;     SET_PLOT, mydevice
 
   ;;;;;;;
   ; SAVE SPECTRUM WITH MODEL AS A TEXT FILE
-  openw,lun, outfilepath + 'figures/' + outfilename + '_bestfit_figuredata.dat', /get_lun, WIDTH=250, /APPEND
+  openw,lun, outfilepath + 'figures/' + outfilename + '_bestfit_figuredata.dat', /get_lun, WIDTH=250; , /APPEND
   printf, lun, '# SPECTRUM - DATA AND BEST FITTING MODEL.'
   printf, lun, '# FOR PLOTTING'
   printf, lun, '#'
