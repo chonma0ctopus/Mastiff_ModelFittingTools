@@ -15,6 +15,9 @@ If you make use of these codes, please cite the following two publications:
 The IDL Codes required for this tool are all contained in the IDLCodes/ folder. You will 
 also need the IDL Astronomy User's Library which is available at this website:
 https://idlastro.gsfc.nasa.gov/
+(Especially, these two libraries are required:  
+    - /usr/local/harris/idl88/external/astron  
+    - /usr/local/harris/idl88/external/coyote )  
 
 You should place all of these IDL codes in your IDLWorkspace directory, and ensure they are
 added to your IDL paths.
