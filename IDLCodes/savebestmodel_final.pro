@@ -332,23 +332,6 @@ pro savebestmodel_final, configfilepathandname
   ;p5.save, outputfigurefilename + '.eps'
   p5.close
 
-  ; tmp notes by Tako... (Removed in the fugure)
-  ; The NAME field of the !D system variable contains the name of the
-  ; current plotting device.
-  ;;;     mydevice = !D.NAME
-  ; Set plotting to PostScript:
-  ;;;     SET_PLOT, 'Z'
-  ; Use DEVICE to set some PostScript device options:
-  ;DEVICE, FILENAME=outputfigurefilename+'.png', /LANDSCAPE
-  ;;;     DEVICE, set_resolution=[640,680]
-  ; Make a simple plot to the PostScript file:
-  ;;;     PLOT, FINDGEN(10)
-  ;;;     write_png, 'test_filename.png', tvrd()
-  ; Close the PostScript file:
-  ;;;     DEVICE, /CLOSE
-  ; Return plotting to the original device:
-  ;;;     SET_PLOT, mydevice
-
   ;;;;;;;
   ; SAVE SPECTRUM WITH MODEL AS A TEXT FILE
   openw,lun, outfilepath + 'figures/' + outfilename + '_bestfit_figuredata.dat', /get_lun, WIDTH=250; , /APPEND
