@@ -3,6 +3,7 @@
 ;     
 ; AUTHOR: 
 ;      Megan E. Tannock (contact: mtannock@uwo.ca)
+;      Hiroyuki Tako Ishikawa (contact: hishikaw@uwo.ca)
 ;
 ; PURPOSE:
 ;     Fit a grid of model spectra to observed spectra for brown dwarfs. This code 
@@ -12,7 +13,7 @@
 ;     file contains a line for every model on the grid of Teff/logg/fsed/vsini/RV
 ;     with the corresponding chi square values and degrees of freedom so that
 ;     you can do your desired statistics.
-;     
+;
 ;     For details please see:
 ;          Tannock M. E., et al., 2021, AJ, 161, 224      
 ;              https://ui.adsabs.harvard.edu/abs/2022MNRAS.514.3160T/abstract
@@ -49,6 +50,8 @@
 ; NOTES:
 ;     Calls the following custom IDL programs/functions written by Megan Tannock:
 ;       broadenforvsini_final.pro
+;       broadenforIP.pro
+;       get_sigma_ip.pro
 ;       chisquarestats_final.pro
 ;       chopregion_final.pro
 ;       contiuumdiv_polynomial_final.pro
@@ -188,16 +191,22 @@
 ;     nkernels = 1
 ;
 
-pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
+pro fitmodelgrid_final, configfilepathandname, makefigures = makefigures
+  compile_opt idl2
+
+  ; Trying to debug a problem with a file that could not be compiled ——— The real cause of the problem was the mixed case in file names!
+  ; !path = !path + ':' + expand_path('+/Users/chonmac/ghR/Mastiff_ModelFittingTools/IDLCodes/')
+  ; print, !path
+  ; resolve_routine, 'BROADENFORIP', /either
 
   print, 'If you make use of this code, please cite the following two publications:'
   print, ' Tannock M. E., et al., 2021, AJ, 161, 224'
   print, ' Tannock M. E., et al., 2022, MNRAS, 514, 3160'
 
   starttime = systime()
-  print, "fitmodelgrid_final.pro: start time = " + string(starttime)
+  print, 'fitmodelgrid_final.pro: start time = ' + string(starttime)
 
-  ;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;
   ; READ IN ALL INFORMATION FROM A CONFIGURATION FILE
 
   ; get the parameters from the configuration file
@@ -237,43 +246,39 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
   bcv = keywords[25]
   nkernels = keywords[26]
 
-  ;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;
 
   ; Other constants:
   c = 2.99792458d5 ; km/s - speed of light
 
-
-  ;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;
   ; SET UP AN ARRAY OF VSINI VALUES
-  vsinilength = round(( double(vsiniendval) - double(vsinistartval) ) / double(vsinistep))
-  vsinis = ((dindgen(double(vsinilength + 1.)) ) * double(vsinistep) ) + double(vsinistartval)
+  vsinilength = round((double(vsiniendval) - double(vsinistartval)) / double(vsinistep))
+  vsinis = ((dindgen(double(vsinilength + 1.))) * double(vsinistep)) + double(vsinistartval)
 
   print, 'vsinis are: (km/s)'
   print, vsinis
 
-  ;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;
   ; SET UP AN ARRAY OF RV SHIFT VALUES in number of array elements
-  rvlength = round(( double(rvshiftendval) - double(rvshiftstartval) ) / double(rvshiftstep))
-  shifts = ((dindgen(double(rvlength + 1.)) ) * double(rvshiftstep) ) + double(rvshiftstartval)
+  rvlength = round((double(rvshiftendval) - double(rvshiftstartval)) / double(rvshiftstep))
+  shifts = ((dindgen(double(rvlength + 1.))) * double(rvshiftstep)) + double(rvshiftstartval)
   rvs = shifts
 
   print, 'rv shifts are: (km/s)'
   print, shifts
 
-
-  ;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;
   ; DETERMINE WHICH PARTS OF THE SPECTRUM WE ARE USING
   regions = getregions_final(wavelengthregionname, wavelengthregion, dividecontinuum)
 
-
-  ;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;
   ; READ IN THE DATA FILE
   slitwidth = 1 ; Set up this parameter. We will fill it with the correct value in with readdata_final.pro
   datavalues = readdata_final(objectinstrument, objectpath, objectfilename, objecterrorname, slitwidth)
   ; datavalues is an array of arrays: [[flux], [error], [lam]]
 
-
-  ;;;;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;;;;
   ; Apply a mask for the OH emission telluric lines
 
   ; PSG MASK ONLY AVAILABLE FOR J, H AND K BANDS
@@ -281,34 +286,48 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
   masktellurics = uint(masktellurics) ; if 0, don't mask, if anything else, do mask
   bcv = float(bcv)
 
-  IF (masktellurics eq 0) THEN BEGIN
+  if (masktellurics eq 0) then begin
     print, 'fitmodelgrid_final.pro: No mask for tellurics, leave data as is.'
-  ENDIF ELSE BEGIN
+  endif else begin
     ; read in the Planetary Spectrum Generator file and OH line list for making a mask:
 
     ; read in the PSG:
     psgname = 'psg_alldefault_JHKband_data.txt'
     ; # Wave/freq Total H2O CO2 O3 N2O CO CH4 O2 N2 Rayleigh CIA
     fmt = 'D,D' ; format of filename
-    readcol, psgpath + psgname, FORMAT = fmt, inpsglam, intransmittance, SKIPLINE=14, /SILENT ; Read in the data - there are many more columns, but we only need the first two
+    readcol, psgpath + psgname, format = fmt, inpsglam, intransmittance, skipline = 14, /silent ; Read in the data - there are many more columns, but we only need the first two
 
     ; read in the OH line list
     ohfilename = 'ohlines.dat'
     fmt = 'D,D'
-    readcol, psgpath + ohfilename, FORMAT = fmt, inohlam, inohstrength, COMMENT='#' ; Read in the data
+    readcol, psgpath + ohfilename, format = fmt, inohlam, inohstrength, comment = '#' ; Read in the data
     inohlam = inohlam / 10000. ; convert Angstroms to um
 
-    mask =  maketelluricmask_final(intransmittance, inpsglam, inohstrength, inohlam, datavalues[*,1], datavalues[*,0], bcv, masktellurics/100., slitwidth, objectname)
+    mask = maketelluricmask_final(intransmittance, inpsglam, inohstrength, inohlam, datavalues[*, 1], datavalues[*, 0], bcv, masktellurics / 100., slitwidth, objectname)
     ; mask is an array of 1s and NaNs
 
     ; multiply the flux by the mask
-    datavalues[*,1] = datavalues[*,1] * mask ; mask the flux
-    datavalues[*,2] = datavalues[*,2] * mask ; mask the uncertainty
+    datavalues[*, 1] = datavalues[*, 1] * mask ; mask the flux
+    datavalues[*, 2] = datavalues[*, 2] * mask ; mask the uncertainty
+  endelse
 
-  ENDELSE
+  ; #test241120 by Tako begin
 
+  ;   ;;;;;;;
+  ; ; SAVE SPECTRUM WITH MODEL AS A TEXT FILE
+  ; openw,lun, outfilepath + 'test4/' + 'testspectrum.dat', /get_lun, WIDTH=250; , /APPEND
+  ; printf, lun, '# SPECTRUM - TEST on 2024/11/20.'
+  ; printf, lun, '#'
+  ; IF (masktellurics eq 1) THEN printf, lun, '# TELLURIC LINE MASK APPLIED, <35% TRANSMISSION (from PSG) AND OH EMISSION LINES (from IGRINS documentation)'
+  ; IF (masktellurics eq 0) THEN printf, lun, '# NO TELLURIC LINE MASK APPLIED'
 
-  ;;;;;;;;;
+  ; printf, lun, '# wavelength (um),    data flux,      uncertainty' ;,     model flux'
+  ; FOR i = 0, n_elements( datavalues[*, 0])-1 DO printf, lun, datavalues[i, 0], datavalues[i, 1], datavalues[i, 2] ;, error_final[i], modelflux_final[i]
+  ; Free_lun, lun
+
+  ; #test241120 by Tako end
+
+  ; ;;;;;;;;
   ; CHOP OUT THE REGION OF INTEREST IN BOTH THE DATA AND MODEL
 
   ; get the lower and upper limits on the current region
@@ -316,25 +335,41 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
   upperlam = wavelengthregion[1]
 
   ; do the chopping
-  datavalues_chop = chopregion_final(lowerlam, upperlam, datavalues[*,0], datavalues[*,1])
-  errorvalues_chop = chopregion_final(lowerlam, upperlam, datavalues[*,0], datavalues[*,2])
+  datavalues_chop = chopregion_final(lowerlam, upperlam, datavalues[*, 0], datavalues[*, 1])
+  errorvalues_chop = chopregion_final(lowerlam, upperlam, datavalues[*, 0], datavalues[*, 2])
 
   ; change the names of the lambda arrays, just so they are a little easier to read
-  datalam_match = datavalues_chop[*,0]
+  datalam_match = datavalues_chop[*, 0]
 
-
-  ;;;;;;;;;
+  ; ;;;;;;;;
   ; NORMALIZATION AND DIVIDE OUT CONTINUUM, IF NECESSARY
   print, 'fitmodelgrid_final.pro: Normalizing data...'
   normalizationregions = getregions_final(wavelengthregionname, normalizationregion, dividecontinuum)
   normindex = where(datalam_match gt normalizationregion[0] and datalam_match lt normalizationregion[1])
-  normvalue = mean(datavalues_chop[normindex,1], /NAN)
+  normvalue = mean(datavalues_chop[normindex, 1], /nan)
 
-  dataflux_match = datavalues_chop[*,1] / normvalue
-  error_match = errorvalues_chop[*,1] / normvalue
-  
-  
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  dataflux_match = datavalues_chop[*, 1] / normvalue
+  error_match = errorvalues_chop[*, 1] / normvalue
+
+  ; #test241120 by Tako begin
+
+  ;   ;;;;;;;
+  ; ; SAVE SPECTRUM WITH MODEL AS A TEXT FILE
+  ; openw,lun, outfilepath + 'test4/' + 'testspectrum_norm.dat', /get_lun, WIDTH=250; , /APPEND
+  ; printf, lun, '# SPECTRUM after chopping and normalized - TEST on 2024/11/20.'
+  ; printf, lun, '#'
+  ; IF (masktellurics eq 1) THEN printf, lun, '# TELLURIC LINE MASK APPLIED, <35% TRANSMISSION (from PSG) AND OH EMISSION LINES (from IGRINS documentation)'
+  ; IF (masktellurics eq 0) THEN printf, lun, '# NO TELLURIC LINE MASK APPLIED'
+
+  ; printf, lun, '# wavelength (um),    data flux,      uncertainty' ;,     model flux'
+  ; FOR i = 0, n_elements(datalam_match)-1 DO printf, lun, datalam_match[i], dataflux_match[i], error_match[i] ;, error_final[i], modelflux_final[i]
+  ; Free_lun, lun
+
+  ; print, "#test241120 by Tako"
+  ; stop
+  ; #test241120 by Tako end
+
+  ; ;;;;;;;;;;;;;;;;;;;;;;;;;;
   ; divide out continuum if requested...
   if dividecontinuum eq 0 then begin ; check if continuum division key word is set in the config file
     ; do nothing
@@ -347,32 +382,29 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
     error_match = error_match / datafit ; divide by that fit
   endelse
 
-
-
-  ;;;;;;;;;
+  ; ;;;;;;;;
   ; ADD EXTRA UNCERTAINTY IN QUADRATURE
   print, 'fitmodelgrid_final.pro: adding in extra CONSTANT uncertainty of ' + string(erroradjust) + ' (in quadrature: new error = sqrt(error^2 + constant^2))'
-  error_match = sqrt( (error_match*error_match) + (float(erroradjust)*float(erroradjust)) )
+  error_match = sqrt((error_match * error_match) + (float(erroradjust) * float(erroradjust)))
 
-
-  ;;;;;;;;
+  ; ;;;;;;;
   ; MAKE OUTPUT FILE TO PUT THE REDUCED CHI SQUARE FITTING INFORMATION IN, for each region.
   ; There is a single output file for each region, instead of one file with many regions
   ; We're just setting up the column headers here. Information to be added below.
-  openw,lun, outfilepath + objectname + '_' + rundate + '_' +wavelengthregionname + '.dat', /get_lun, WIDTH=250 ; Created anew (overwriting)
+  openw, lun, outfilepath + objectname + '_' + rundate + '_' + wavelengthregionname + '.dat', /get_lun, width = 250 ; Created anew (overwriting)
   printf, lun, '# Config file was: ' + configfilepathandname
   printf, lun, '# Input keywords were: ' + configfilepathandname
-  FOR i = 0, n_elements(keywords)-1 DO printf, lun, '#     ' + keywords[i]
+  for i = 0, n_elements(keywords) - 1 do printf, lun, '#     ' + keywords[i]
   printf, lun, '#'
-  
-  IF (masktellurics eq 0) THEN begin
+
+  if (masktellurics eq 0) then begin
     printf, lun, '# NO TELLURIC LINE MASK APPLIED'
-  ENDIF ELSE BEGIN
-    printf, lun, '# TELLURIC LINE MASK APPLIED, <'+strtrim(masktellurics,1)+'% TRANSMISSION (from PSG) AND OH EMISSION LINES'
-  ENDELSE
-  
+  endif else begin
+    printf, lun, '# TELLURIC LINE MASK APPLIED, <' + strtrim(masktellurics, 1) + '% TRANSMISSION (from PSG) AND OH EMISSION LINES'
+  endelse
+
   printf, lun, '#'
-  CASE scaletype OF
+  case scaletype of
     'None': begin
       printf, lun, '# Filename                                  T_eff             log(g)         f_sed          kzz        chisquare       d.o.f.             reduchisquare    vsini(km/s)     rv(km/s)'
     end
@@ -392,50 +424,44 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
       printf, lun, '# Filename                                  T_eff             log(g)         f_sed          kzz        chisquare       d.o.f.             reduchisquare    vsini(km/s)     rv(km/s)       a        b       c'
     end
     'QuadraticAndOffset': begin
-        printf, lun, '# Filename                                  T_eff             log(g)         f_sed          kzz        chisquare       d.o.f.             reduchisquare    vsini(km/s)     rv(km/s)       a        b       c       offset'
+      printf, lun, '# Filename                                  T_eff             log(g)         f_sed          kzz        chisquare       d.o.f.             reduchisquare    vsini(km/s)     rv(km/s)       a        b       c       offset'
     end
-  ENDCASE
-  Free_lun, lun
+  endcase
+  free_lun, lun
 
-
-
-  ;;;;;;;;;;;;;;;
+  ; ;;;;;;;;;;;;;;
   ; OBTAIN THE LIST OF MODEL NAMES FROM THE FILE SPECIFIED IN THE CONFIGURATION FILE
   modelnames = getmodelnames_final(modelnamesfile)
   ; Now we have a list of the model file names. We need to loop through each one.
   print, 'fitmodelgrid_final.pro: Reading in models from ' + modelnamesfile
 
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;;;;;;; HERE WE BEGIN A SERIES OF NESTED FOR LOOPS...
-
+  ; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ; ;;;;;; HERE WE BEGIN A SERIES OF NESTED FOR LOOPS...
 
   ; GO THROUGH THE MODELS ONE AT A TIME. go through all steps for one model, then move on.
-  for m=0,n_elements(modelnames)-1 do begin
-
+  for m = 0, n_elements(modelnames) - 1 do begin
     ; print some useful information
-    print, 'fitmodelgrid_final.pro: Starting model ' + modelnames[m] + ', model number ' + strtrim(m+1,1) + '/' + strtrim(n_elements(modelnames),1), '   ', systime()
+    print, 'fitmodelgrid_final.pro: Starting model ' + modelnames[m] + ', model number ' + strtrim(m + 1, 1) + '/' + strtrim(n_elements(modelnames), 1), '   ', systime()
 
-    ;;;;;;;;;
+    ; ;;;;;;;;
     ; GET THIS MODEL'S PARAMETERS from it's filename
     modelparams = getmodelparameters_final(modeltype, modelnames[m]) ; modelparams = [temperature, g, fsed, kzz]
 
-    ;;;;;;;;;
+    ; ;;;;;;;;
     ; READ IN THE MODEL
     modelvalues = readmodels_final(modeltype, modelpath, modelnames[m])
     ; modelvalues is an array of arrays: [[flux], [lam]]
 
-
-    ;;;;;;;;;
+    ; ;;;;;;;;
     ; CHOP OUT THE REGION OF INTEREST IN BOTH THE DATA AND MODEL
     ; Keep some excess on the model, so that shifting around for RV works
-    modelvalues_chop = chopregion_final(lowerlam-0.02, upperlam+0.02, modelvalues[*,0], modelvalues[*,1])
-    
+    modelvalues_chop = chopregion_final(lowerlam - 0.02, upperlam + 0.02, modelvalues[*, 0], modelvalues[*, 1])
+
     ; change the names of the arrays, just so they are a little easier to read
-    modelflux_match = modelvalues_chop[*,1]
-    modellam_match = modelvalues_chop[*,0]
+    modelflux_match = modelvalues_chop[*, 1]
+    modellam_match = modelvalues_chop[*, 0]
 
-
-    ;;;;;;;;;
+    ; ;;;;;;;;
     ; DIVIDE OUT CONTINUUM, IF NECESSARY
     if dividecontinuum eq 0 then begin ; check if continuum division key word is set in the config file
       ; do nothing
@@ -447,44 +473,40 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
       modelflux_match = modelflux_match / modelfit ; divide by that fit
     endelse
 
-
-
-    ;;;;;;;;;
+    ; ;;;;;;;;
     ; LOOP THROUGH THE VSINI VALUES
-    for v=0,n_elements(vsinis)-1 do begin
-      
-      ;;;;;;;;;
+    for v = 0, n_elements(vsinis) - 1 do begin
+      ; ;;;;;;;;
       ; BROADEN THE MODEL TO THE VSINI
       ; Broaden with rotation kernel of Gray (1992)
-      modelflux_broadened = broadenforvsini_final(modellam_match, modelflux_match, vsinis[v], nkernels, limbdarkeningcoefficient)
- 
-      ;;;;;;;;;;;;;;;;;;;;;;;;;;; end of broadening part of code
+      modelflux_broadened_vsini = broadenforvsini_final(modellam_match, modelflux_match, vsinis[v], nkernels, limbdarkeningcoefficient)
+      ; ;;;;;;;;;;;;;;;;;;;;;;;;;; end of rotational broadening part of code
 
+      ; ;;;;;;;;
+      ; APPLY INSTRUMENTAL PROFILE (IP) BROADENING
+      modelflux_broadened_vsini_ip = broadenforip(modellam_match, modelflux_broadened_vsini)
+      ; ;;;;;;;;;;;;;;;;;;;;;;;;;; end of IP broadening part of code
 
-      ;;;;;;;;;
+      ; ;;;;;;;;
       ; LOOP THROUGH THE RV SHIFT VALUES (array is called 'shifts')
-      for s=0,n_elements(shifts)-1 do begin
-
-        ;;;;;;;;;
+      for s = 0, n_elements(shifts) - 1 do begin
+        ; ;;;;;;;;
         ; APPLY THE RV SHIFT TO THE MODEL
-        modellam_shifted = modellam_match * (1. + (shifts[s] / c) ) ; c = speed of light
+        modellam_shifted = modellam_match * (1. + (shifts[s] / c)) ; c = speed of light
+        ; ;;;;;;;;;;;;;;;;;;;;;;;;;; end of shifting part of code
 
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;; end of shifting part of code
-
-
-        ;;;;;;;;;
+        ; ;;;;;;;;
         ; Now for some finishing touches before saving out the results!
 
-        ;;;;;;;;;
+        ; ;;;;;;;;
         ; MATCH THE RESOLUTION OF THE MODEL TO THE DATA
-        modelflux_resmatch = resamplemodel_final(datalam_match, modellam_shifted, modelflux_broadened)
+        modelflux_resmatch = resamplemodel_final(datalam_match, modellam_shifted, modelflux_broadened_vsini_ip)
         ; rename the wavelength array so we know we have matched the resolution to the data
         modellam_resmatch = datalam_match
-  
+
         ; Normalize the model to the normalization region defined in the config file
         normindex = where(modellam_resmatch gt normalizationregion[0] and modellam_resmatch lt normalizationregion[1])
-        modelflux_resmatch = modelflux_resmatch / mean(modelflux_resmatch[normindex], /NAN)
-
+        modelflux_resmatch = modelflux_resmatch / mean(modelflux_resmatch[normindex], /nan)
 
         ; Now do any fancy scaling or offsets you like:
         dataflux_final = dataflux_match ; we're going to overwrite this, so let's just keep the old one just in case
@@ -492,65 +514,59 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
         modelflux_final = modelflux_resmatch ; we're going to overwrite this, so let's just keep the old one just in case
         constants = scalemodelanddata_final(datalam_match, dataflux_final, error_final, modelflux_final, scaletype) ; returns the constants used for the scaling/offsets
 
-
-        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        ; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
         ; CALCULATE FINAL REDUCED CHI SQUARE
         chisquarestatsarray = chisquarestats_final(dataflux_final, error_final, modelflux_final)
         chisquarevalue = chisquarestatsarray[0] ; chi square
         reducedchisquarevalue = chisquarestatsarray[1] ; reduced chi square
         dof = chisquarestatsarray[2] ; degrees of freedom
 
-        ;;;;;;;;;
+        ; ;;;;;;;;
         ; WRITE REDUCED CHI SQUARE AND OTHER PARAMETERS TO OUTPUT FILE
-        openw,lun, outfilepath + objectname + '_' + rundate + '_' +wavelengthregionname + '.dat', /get_lun, WIDTH=250, /APPEND
-        
-        CASE scaletype OF
+        openw, lun, outfilepath + objectname + '_' + rundate + '_' + wavelengthregionname + '.dat', /get_lun, width = 250, /append
+
+        case scaletype of
           'None': begin
-            printf, lun, modelnames[m], '   ', trim(modelparams[0]), '    ', trim(modelparams[1]), '    ', trim(modelparams[2]), '    ', trim(modelparams[3]), '    ', $
+            printf, lun, modelnames[m], '   ', TRIM(modelparams[0]), '    ', TRIM(modelparams[1]), '    ', TRIM(modelparams[2]), '    ', TRIM(modelparams[3]), '    ', $
               chisquarevalue, dof, reducedchisquarevalue, vsinis[v], '  ', shifts[s]
           end
           'Scale': begin
-            printf, lun, modelnames[m], '   ', trim(modelparams[0]), '    ', trim(modelparams[1]), '    ', trim(modelparams[2]), '    ', trim(modelparams[3]), '    ', $
+            printf, lun, modelnames[m], '   ', TRIM(modelparams[0]), '    ', TRIM(modelparams[1]), '    ', TRIM(modelparams[2]), '    ', TRIM(modelparams[3]), '    ', $
               chisquarevalue, dof, reducedchisquarevalue, vsinis[v], '  ', shifts[s], ' ', $
               constants[0]
           end
           'ScaleAndOffset': begin
-            printf, lun, modelnames[m], '   ', trim(modelparams[0]), '    ', trim(modelparams[1]), '    ', trim(modelparams[2]), '    ', trim(modelparams[3]), '    ', $
+            printf, lun, modelnames[m], '   ', TRIM(modelparams[0]), '    ', TRIM(modelparams[1]), '    ', TRIM(modelparams[2]), '    ', TRIM(modelparams[3]), '    ', $
               chisquarevalue, dof, reducedchisquarevalue, vsinis[v], '  ', shifts[s], ' ', $
               constants[0], constants[1]
           end
           'Linear': begin
-            printf, lun, modelnames[m], '   ', trim(modelparams[0]), '    ', trim(modelparams[1]), '    ', trim(modelparams[2]), '    ', trim(modelparams[3]), '    ', $
+            printf, lun, modelnames[m], '   ', TRIM(modelparams[0]), '    ', TRIM(modelparams[1]), '    ', TRIM(modelparams[2]), '    ', TRIM(modelparams[3]), '    ', $
               chisquarevalue, dof, reducedchisquarevalue, vsinis[v], '  ', shifts[s], ' ', $
               constants[0], constants[1]
           end
           'LinearAndOffset': begin
-            printf, lun, modelnames[m], '   ', trim(modelparams[0]), '    ', trim(modelparams[1]), '    ', trim(modelparams[2]), '    ', trim(modelparams[3]), '    ', $
+            printf, lun, modelnames[m], '   ', TRIM(modelparams[0]), '    ', TRIM(modelparams[1]), '    ', TRIM(modelparams[2]), '    ', TRIM(modelparams[3]), '    ', $
               chisquarevalue, dof, reducedchisquarevalue, vsinis[v], '  ', shifts[s], ' ', $
               constants[0], constants[1], constants[2]
-          end 
+          end
           'Quadratic': begin
-            printf, lun, modelnames[m], '   ', trim(modelparams[0]), '    ', trim(modelparams[1]), '    ', trim(modelparams[2]), '    ', trim(modelparams[3]), '    ', $
+            printf, lun, modelnames[m], '   ', TRIM(modelparams[0]), '    ', TRIM(modelparams[1]), '    ', TRIM(modelparams[2]), '    ', TRIM(modelparams[3]), '    ', $
               chisquarevalue, dof, reducedchisquarevalue, vsinis[v], '  ', shifts[s], ' ', $
               constants[0], constants[1], constants[2]
-              ; # Filename                                  T_eff             log(g)         f_sed          kzz        chisquare       d.o.f.             reduchisquare    vsini(km/s)     rv(km/s)       a        b       c
+            ; # Filename                                  T_eff             log(g)         f_sed          kzz        chisquare       d.o.f.             reduchisquare    vsini(km/s)     rv(km/s)       a        b       c
           end
           'QuadraticAndOffset': begin
-            printf, lun, modelnames[m], '   ', trim(modelparams[0]), '    ', trim(modelparams[1]), '    ', trim(modelparams[2]), '    ', trim(modelparams[3]), '    ', $
+            printf, lun, modelnames[m], '   ', TRIM(modelparams[0]), '    ', TRIM(modelparams[1]), '    ', TRIM(modelparams[2]), '    ', TRIM(modelparams[3]), '    ', $
               chisquarevalue, dof, reducedchisquarevalue, vsinis[v], '  ', shifts[s], ' ', $
               constants[0], constants[1], constants[2], constants[3]
-          end         
-        ENDCASE
-        
-        Free_lun, lun
-        
+          end
+        endcase
+
+        free_lun, lun
       endfor ; end loop through RV shift values
-
     endfor ; end loop through the vsini values
-
   endfor ; end loop through model names
-
-
 
   print
   print, 'fitmodelgrid_final.pro: FITTING GRID COMPLETE.'
@@ -561,14 +577,13 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
   print, 'fitmodelgrid_final.pro: start time = ' + string(starttime)
   print, 'fitmodelgrid_final.pro: finish time = ' + systime()
 
-
   if keyword_set(makefigures) then begin
     print, 'fitmodelgrid_final.pro: MAKEFIGURES keyword set.'
     print, 'fitmodelgrid_final.pro: Save the best fitting model spectrum as a text file with the data to create a nice figure.'
     print, 'fitmodelgrid_final.pro: calling SAVEBESTMODEL_FINAL.PRO.'
     savebestmodel_final, configfilepathandname
     print
-    print, 'fitmodelgrid_final.pro: time = ' + systime()    
+    print, 'fitmodelgrid_final.pro: time = ' + systime()
   endif else begin
     print, 'fitmodelgrid_final.pro: MAKEFIGURES keyword not set.'
     print, 'fitmodelgrid_final.pro: Do not make figures'
@@ -580,5 +595,4 @@ pro fitmodelgrid_final, configfilepathandname, MAKEFIGURES = makefigures
   print, 'If you make use of this code, please cite the following two publications:'
   print, ' Tannock M. E., et al., 2021, AJ, 161, 224'
   print, ' Tannock M. E., et al., 2022, MNRAS, 514, 3160'
-
 end
