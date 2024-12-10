@@ -91,7 +91,7 @@ pro savebestmodel_final, configfilepathandname
   print, size(bestindex)
   print, n_elements(bestindex)
   IF n_elements(bestindex) gt 1 THEN BEGIN
-    print, 'Multiple bestindexes are reduced to one as a temporary measure.'
+    print, '!WARNING!:  Multiple bestindexes are reduced to one as a temporary measure.'
     bestindex = bestindex[0]
   endif
   
@@ -327,9 +327,12 @@ pro savebestmodel_final, configfilepathandname
     /current, layout=[1,3,3], $
     /buffer)
   outputfigurefilename = outfilepath + 'figures/' + outfilename + '_bestfit_figure'
-  p5.save, outputfigurefilename + '.png'
+
+  ; You can choose the file type for the output figures.
+  ; p5.save, outputfigurefilename + '.png'
   p5.save, outputfigurefilename + '.pdf'
-  ;p5.save, outputfigurefilename + '.eps'
+  ; p5.save, outputfigurefilename + '.eps'
+  
   p5.close
 
   ;;;;;;;
