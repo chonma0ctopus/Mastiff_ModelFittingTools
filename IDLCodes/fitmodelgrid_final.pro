@@ -311,22 +311,6 @@ pro fitmodelgrid_final, configfilepathandname, makefigures = makefigures
     datavalues[*, 2] = datavalues[*, 2] * mask ; mask the uncertainty
   endelse
 
-  ; #test241120 by Tako begin
-
-  ;   ;;;;;;;
-  ; ; SAVE SPECTRUM WITH MODEL AS A TEXT FILE
-  ; openw,lun, outfilepath + 'test4/' + 'testspectrum.dat', /get_lun, WIDTH=250; , /APPEND
-  ; printf, lun, '# SPECTRUM - TEST on 2024/11/20.'
-  ; printf, lun, '#'
-  ; IF (masktellurics eq 1) THEN printf, lun, '# TELLURIC LINE MASK APPLIED, <35% TRANSMISSION (from PSG) AND OH EMISSION LINES (from IGRINS documentation)'
-  ; IF (masktellurics eq 0) THEN printf, lun, '# NO TELLURIC LINE MASK APPLIED'
-
-  ; printf, lun, '# wavelength (um),    data flux,      uncertainty' ;,     model flux'
-  ; FOR i = 0, n_elements( datavalues[*, 0])-1 DO printf, lun, datavalues[i, 0], datavalues[i, 1], datavalues[i, 2] ;, error_final[i], modelflux_final[i]
-  ; Free_lun, lun
-
-  ; #test241120 by Tako end
-
   ; ;;;;;;;;
   ; CHOP OUT THE REGION OF INTEREST IN BOTH THE DATA AND MODEL
 
@@ -350,24 +334,6 @@ pro fitmodelgrid_final, configfilepathandname, makefigures = makefigures
 
   dataflux_match = datavalues_chop[*, 1] / normvalue
   error_match = errorvalues_chop[*, 1] / normvalue
-
-  ; #test241120 by Tako begin
-
-  ;   ;;;;;;;
-  ; ; SAVE SPECTRUM WITH MODEL AS A TEXT FILE
-  ; openw,lun, outfilepath + 'test4/' + 'testspectrum_norm.dat', /get_lun, WIDTH=250; , /APPEND
-  ; printf, lun, '# SPECTRUM after chopping and normalized - TEST on 2024/11/20.'
-  ; printf, lun, '#'
-  ; IF (masktellurics eq 1) THEN printf, lun, '# TELLURIC LINE MASK APPLIED, <35% TRANSMISSION (from PSG) AND OH EMISSION LINES (from IGRINS documentation)'
-  ; IF (masktellurics eq 0) THEN printf, lun, '# NO TELLURIC LINE MASK APPLIED'
-
-  ; printf, lun, '# wavelength (um),    data flux,      uncertainty' ;,     model flux'
-  ; FOR i = 0, n_elements(datalam_match)-1 DO printf, lun, datalam_match[i], dataflux_match[i], error_match[i] ;, error_final[i], modelflux_final[i]
-  ; Free_lun, lun
-
-  ; print, "#test241120 by Tako"
-  ; stop
-  ; #test241120 by Tako end
 
   ; ;;;;;;;;;;;;;;;;;;;;;;;;;;
   ; divide out continuum if requested...
