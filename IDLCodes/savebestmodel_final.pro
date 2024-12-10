@@ -263,8 +263,14 @@ pro savebestmodel_final, configfilepathandname
   ;;;;;;;;;
   ; BROADEN THE MODEL TO THE VSINI
   ; Broaden with rotation kernel of Gray (1992)
-  modelflux_broadened = broadenforvsini_final(modellam_match, modelflux_match, vsinis[0], nkernels, limbdarkeningcoefficient)
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;; end of broadening part of code
+  modelflux_broadened_vsini = broadenforvsini_final(modellam_match, modelflux_match, vsinis[0], nkernels, limbdarkeningcoefficient)
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;; end of rotational broadening part of code
+
+
+  ; ;;;;;;;;
+  ; APPLY INSTRUMENTAL PROFILE (IP) BROADENING
+  modelflux_broadened_vsini_ip = broadenforip(modellam_match, modelflux_broadened_vsini)
+  ; ;;;;;;;;;;;;;;;;;;;;;;;;;; end of IP broadening part of code
 
 
   ;;;;;;;;;
@@ -279,7 +285,7 @@ pro savebestmodel_final, configfilepathandname
   ;;;;;;;;;
   ; MATCH THE RESOLUTION OF THE MODEL TO THE DATA
 
-  modelflux_resmatch = resamplemodel_final(datalam_match, modellam_shifted, modelflux_broadened)
+  modelflux_resmatch = resamplemodel_final(datalam_match, modellam_shifted, modelflux_broadened_vsini_ip)
   ; rename the wavelength array so we know we have matched the resolution to the data
   modellam_resmatch = datalam_match
 
@@ -327,12 +333,9 @@ pro savebestmodel_final, configfilepathandname
     /current, layout=[1,3,3], $
     /buffer)
   outputfigurefilename = outfilepath + 'figures/' + outfilename + '_bestfit_figure'
-
-  ; You can choose the file type for the output figures.
   ; p5.save, outputfigurefilename + '.png'
   p5.save, outputfigurefilename + '.pdf'
   ; p5.save, outputfigurefilename + '.eps'
-  
   p5.close
 
   ;;;;;;;
