@@ -2,9 +2,9 @@
 
 Hello! Welcome to MASTIFF - a tool for fitting model spectra to observed spectra
 
-by Megan Tannock
+Created by [Megan Tannock](https://github.com/megantannock), updated by [Hiroyuki Tako Ishikawa](https://github.com/chonma0ctopus)
 
-Contact: mtannock@uwo.ca
+Contact: mtannock@uwo.ca, hishikaw@uwo.ca
 
 If you make use of these codes, please cite the following three publications:
  
