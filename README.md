@@ -6,11 +6,13 @@ by Megan Tannock
 
 Contact: mtannock@uwo.ca
 
-If you make use of these codes, please cite the following two publications:
+If you make use of these codes, please cite the following three publications:
  
  Tannock M. E., et al., 2021, AJ, 161, 224
  
  Tannock M. E., et al., 2022, MNRAS, 514, 3160
+
+ Ishikawa H. T., et al., 2025, MNRAS, 539, 1088
 
 The IDL Codes required for this tool are all contained in the IDLCodes/ folder. You will 
 also need the IDL Astronomy User's Library which is available at this website:
